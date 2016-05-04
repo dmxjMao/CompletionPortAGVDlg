@@ -7,10 +7,13 @@
 #include "serverDlg.h"
 #include "afxdialogex.h"
 
+#include "ClientContext.h"
+
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
 
+#define TIMER_PULSE 1
 
 // 用于应用程序“关于”菜单项的 CAboutDlg 对话框
 
@@ -69,6 +72,8 @@ BEGIN_MESSAGE_MAP(CServerDlg, CDialogEx)
 	ON_WM_RBUTTONDOWN()
 	ON_WM_MOUSEMOVE()
 	ON_BN_CLICKED(IDC_BUTTON_EXPORTXY, &CServerDlg::OnClickedButtonExportxy)
+	ON_WM_TIMER()
+	ON_WM_SIZE()
 END_MESSAGE_MAP()
 
 
@@ -104,19 +109,32 @@ BOOL CServerDlg::OnInitDialog()
 	SetIcon(m_hIcon, FALSE);		// 设置小图标
 
 	// TODO: 在此添加额外的初始化代码
+	//get init dialog size
+	GetClientRect(&m_rcDlg);
+	int cxx = GetSystemMetrics(SM_CXFULLSCREEN);
+	int cyy = GetSystemMetrics(SM_CYFULLSCREEN);
+	CRect rc(0, 0, cxx, cyy);
+	rc.DeflateRect(cxx / 20, cyy / 20);
+	MoveWindow(rc);
 
 	//get IDC_STATIC_WATCHER size m_rcWatcher & m_rcDlg & m_rcTarget
-	((CStatic*)GetDlgItem(IDC_STATIC_WATCHER))->GetClientRect(m_rcWatcher);
-	GetClientRect(m_rcDlg);
+	((CStatic*)GetDlgItem(IDC_STATIC_WATCHER))->GetClientRect(&m_rcWatcher);
+	GetClientRect(&m_rcDlg);
 
-	m_rcTarget = CRect(m_rcDlg.left, m_rcDlg.top, 
+	m_rcTarget = CRect(m_rcDlg.left, m_rcDlg.top,
 		m_rcDlg.right - m_rcWatcher.right - 30, m_rcDlg.bottom);
 
 	//start the server
 	m_server.StartServer();
 
+	//attach the main wnd
+	m_server.AttachWnd(this);
+
 	//get xy from file
 	GetMapXYFromFile();
+
+	//start pulse
+	SetTimer(TIMER_PULSE, 10 * 1000, nullptr);
 
 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
 }
@@ -409,3 +427,71 @@ void CServerDlg::GetMapXYFromFile()
 //{
 //
 //}
+
+void CServerDlg::OnTimer(UINT_PTR nIDEvent)
+{
+	// TODO: Add your message handler code here and/or call default
+	if (TIMER_PULSE == nIDEvent) {
+		auto& clientList = m_server.m_clientMgr.m_clientList;
+		for (auto it = clientList.begin(); it != clientList.end(); ++it)
+		{
+			CClientContext *pClient = *it;
+			//比较时间
+			CTime curTime = CTime::GetCurrentTime();
+			int	nDay = curTime.GetDay() - pClient->m_time.GetDay();			//日
+			int	nHour = curTime.GetHour() - pClient->m_time.GetHour();		//小时
+			int	nMinute = curTime.GetMinute() - pClient->m_time.GetMinute();//分钟
+			int	nSecond = curTime.GetSecond() - pClient->m_time.GetSecond();//秒
+
+			CTimeSpan spanTime(nDay, nHour, nMinute, nSecond);
+			if (spanTime.GetSeconds() > 20)//大于20s
+			{
+				//删除该客户端
+				m_server.m_clientMgr.DeleteClient(pClient);
+			}
+		}
+	}
+
+	CDialogEx::OnTimer(nIDEvent);
+}
+
+
+void CServerDlg::OnSize(UINT nType, int cx, int cy)
+{
+	CDialogEx::OnSize(nType, cx, cy);
+
+	// TODO: Add your message handler code here
+	//adjust to your screen
+	if (SIZE_RESTORED == nType) {
+		float ratio[2];
+		POINT newDlgSize;
+		CRect newRect;
+
+		GetClientRect(&newRect);
+		newDlgSize.x = newRect.right - newRect.left;
+		newDlgSize.y = newRect.bottom - newRect.top;
+
+		ratio[0] = (float)newDlgSize.x / (m_rcDlg.right - m_rcDlg.left);
+		ratio[1] = (float)newDlgSize.y / (m_rcDlg.bottom - m_rcDlg.top);
+
+		CRect rect;
+		//int woc;
+
+		//列出所有控件
+		CWnd* pWnd = GetWindow(GW_CHILD);
+		while (pWnd) {
+			pWnd->GetWindowRect(&rect);
+			ScreenToClient(&rect);
+
+			rect.left = (LONG)(rect.left * ratio[0]);
+			rect.right = (LONG)(rect.right * ratio[0]);
+			rect.top = (LONG)(rect.top * ratio[1]);
+			rect.bottom = (LONG)(rect.bottom * ratio[1]);
+
+			pWnd->MoveWindow(rect);
+			pWnd = pWnd->GetWindow(GW_HWNDNEXT);
+		}
+	}
+
+	GetClientRect(&m_rcDlg);
+}

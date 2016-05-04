@@ -43,7 +43,7 @@ void Graph::InitHandle()
 	size_t vertexNum = m_vertex.size();
 	for (size_t i = 0; i < vertexNum + 1; ++i) {
 		m_pHandle[i] = CreateEvent(nullptr, TRUE, TRUE, nullptr);
-		m_mapHandle[i] = m_pHandle[i];
+		m_mapHandle[(int)i] = m_pHandle[i];
 	}
 }
 

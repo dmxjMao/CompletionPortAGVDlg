@@ -163,7 +163,7 @@ void CClientContext::GetCarInfo(char* buf)
 		m_eState = CANCELED; // 小车处于急停或手动状态
 	}
 
-	//m_time = CTime::GetCurrentTime();
+	m_time = CTime::GetCurrentTime();
 
 	m_bChange = JudgeChangeAndLockPoint();
 }

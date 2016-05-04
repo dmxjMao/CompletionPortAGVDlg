@@ -292,12 +292,10 @@ unsigned WINAPI CMyServer::ServiceThread(PVOID pParam)
 			else
 				clientMgr.ProcessIO(pClient, lpOverlapped, dwIoSize);
 		}
-		if (FALSE == bIORet) 
-		{
+		else {
 			if (nullptr == lpOverlapped)
-				continue;
-			DWORD dwErr = GetLastError();
-
+				continue; //函数没有从完成端口取出完成包
+			
 		}
 		//if (FALSE == bIORet && NULL != pClient)
 		//{

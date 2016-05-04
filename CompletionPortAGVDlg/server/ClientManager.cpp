@@ -48,6 +48,7 @@ void CClientManager::DeleteClient(CClientContext* pClient)
 		std::bind(lambdaFindClient, _1, pClient));
 	if (m_clientList.end() != it) {
 		DELETE_PTR((*it));
+		m_clientList.erase(it);
 	}
 
 	LeaveCriticalSection(&m_cs);
@@ -60,6 +61,7 @@ void CClientManager::DeleteAllClient()
 	
 	std::for_each(m_clientList.begin(), m_clientList.end(),
 		lambdaDeleteClient);
+	m_clientList.clear();
 
 	LeaveCriticalSection(&m_cs);
 }
@@ -73,7 +75,7 @@ void CClientManager::ProcessIO(CClientContext* pClient,
 	PIO_OPERATION_DATA pIO = CONTAINING_RECORD(pOverlapped,
 		IO_OPERATION_DATA,
 		overlapped);
-	if (NULL != pIO)
+	if (pIO)
 	{
 		switch (pIO->type)//重叠操作类型
 		{
