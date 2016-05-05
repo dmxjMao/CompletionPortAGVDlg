@@ -117,7 +117,7 @@ void CClientContext::GetCarInfo(char* buf)
 {
 	//Msg_E1* p = (Msg_E1*)&buf[0];
 
-	m_carno = buf[5];
+	m_carno = (BYTE)buf[5];
 	m_m1tag = (BYTE)buf[6];
 	m_m2tag = (BYTE)buf[7];
 	m_m6tag = (BYTE)buf[8];
@@ -125,17 +125,17 @@ void CClientContext::GetCarInfo(char* buf)
 	//char buf13 = buf[13]; //0
 	//char buf14 = buf[14]; //14
 
-	m_curDist = (buf[10] << 8) | buf[9];
-	m_curSideno = (buf[12] << 8) | buf[11];
+	m_curDist = (BYTE)((buf[10] << 8) | buf[9]);
+	m_curSideno = (BYTE)((buf[12] << 8) | buf[11]);
 	//m_curPoint = (buf[13] << 8) | buf[14];  //python版本
-	m_curPoint = (buf[14] << 8) | buf[13];
+	m_curPoint = (BYTE)((buf[14] << 8) | buf[13]);
 	//m_curPoint = ntohs((unsigned char)buf[13]);
 	//m_eState = (buf[16] << 8) | buf[15];
-	m_errcode = buf[17];
+	m_errcode = (BYTE)buf[17];
 	//m_e1.reserve = buf[18];
-	m_curSpeed = (buf[20] << 8) | buf[19];
-	m_optCompleted = buf[21];
-	m_curTaskno = (buf[23] << 8) | buf[22];
+	m_curSpeed = (BYTE)((buf[20] << 8) | buf[19]);
+	m_optCompleted = (BYTE)buf[21];
+	m_curTaskno = (BYTE)((buf[23] << 8) | buf[22]);
 
 	//如果小车有了新任务，将之前任务的终点置为可调用&删除完成的任务
 	if (m_curTaskno != m_prevTaskno) {
