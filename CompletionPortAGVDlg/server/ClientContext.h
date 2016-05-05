@@ -36,7 +36,7 @@ public:
 
 	CTime				m_time;			//心跳时间
 	BOOL				m_bChange;		//小车位置或状态发生变化
-	int					m_prevPoint = -1;		//之前点号
+	int					m_prevPoint = 0;		//之前点号
 	state				m_prevState = STATEBUF;	//之前状态
 	int					m_prevTaskno = -1;		//之前任务号
 
@@ -46,7 +46,7 @@ public:
 
 	BOOL				m_bM6Ok = FALSE;	//M6发送成功
 	BOOL				m_bM2Ok = FALSE;	//M2发送成功
-	BOOL				m_bM1Ok = FALSE;	//M1发送成功
+	//BOOL				m_bM1Ok = FALSE;	//M1发送成功
 
 	int					m_target = 0;		//目标点
 	int					m_optcode = 0;		//操作码
@@ -81,7 +81,8 @@ private:
 	BOOL		GetRoute(int ptSrc, int ptDest);	//获取小车行走路径
 	void		SetM1Buf();							//将计算所得的段号赋值给buf
 	void		ShowAGV();							//显示小车
-	BOOL		GetOverlappedHandle(HANDLE** arr, int& len);		//获取与已有任务的重叠点
+	BOOL		GetOverlappedHandle(HANDLE** arr, int& len, std::vector<UINT16>& tasksnap);//获取与已有任务的重叠点
+	BOOL		GetOverlappedPoint(HANDLE** arr, int& len);					//获取与小车当前点的重叠点
 
 	char		m_m2buf[M2_BUFFSIZE];				//缓存的M2消息
 	char		m_m1buf[M1_BUFFSIZE];				//缓存的M1消息

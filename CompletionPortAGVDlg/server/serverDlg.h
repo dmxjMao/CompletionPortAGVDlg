@@ -6,7 +6,9 @@
 #include "afxwin.h"
 
 #include <map>
+#include <vector>
 #include "MyServer.h"
+#include "TaskSend.h"
 
 
 // CServerDlg 对话框
@@ -53,6 +55,15 @@ private:
 	void ShowTheMap(int nID);
 	void GetMapXYFromFile();
 
+	//性能测试
+	struct BIGDATA {
+		BYTE agvno = 0;
+		UINT16 target = 0;
+	};
+	std::vector<BIGDATA> m_vecBigdata;				//测试性能
+
+	void SendOneTask(int carno, int target);
+	void SendHugeTask();
 	//int InitListenSocket();
 	//int InitListenEvent();
 
@@ -63,4 +74,6 @@ public:
 	afx_msg void OnClickedButtonExportxy();
 	afx_msg void OnTimer(UINT_PTR nIDEvent);
 	afx_msg void OnSize(UINT nType, int cx, int cy);
+	afx_msg void OnClickedButtonDoone();
+	afx_msg void OnClickedButtonDooneDohuge();
 };

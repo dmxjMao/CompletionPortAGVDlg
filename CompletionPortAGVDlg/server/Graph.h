@@ -64,6 +64,7 @@ private:
 public:
 	void InitHandle();
 	BOOL Dijkstra(int ptSrc, int ptDest);	//计算路径
+	void GetTaskSnap(vector<UINT16>& taskSnap); //获取任务快照
 
 private:
 	int UnweightedGraph(Vertex * start);

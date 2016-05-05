@@ -14,6 +14,7 @@
 #endif
 
 #define TIMER_PULSE 1
+#define TIMER_BIGDATA 2
 
 // 用于应用程序“关于”菜单项的 CAboutDlg 对话框
 
@@ -74,6 +75,8 @@ BEGIN_MESSAGE_MAP(CServerDlg, CDialogEx)
 	ON_BN_CLICKED(IDC_BUTTON_EXPORTXY, &CServerDlg::OnClickedButtonExportxy)
 	ON_WM_TIMER()
 	ON_WM_SIZE()
+	ON_BN_CLICKED(IDC_BUTTON_DOONE, &CServerDlg::OnClickedButtonDoone)
+	ON_BN_CLICKED(IDC_BUTTON_DOONE_DOHUGE, &CServerDlg::OnClickedButtonDooneDohuge)
 END_MESSAGE_MAP()
 
 
@@ -217,7 +220,7 @@ void CServerDlg::ShowTheMap(int nID)
 	ReleaseDC(pDC);
 }
 
-
+//
 //void CServerDlg::OnLButtonDown(UINT nFlags, CPoint point)
 //{
 //	// TODO: 在此添加消息处理程序代码和/或调用默认值
@@ -432,24 +435,37 @@ void CServerDlg::OnTimer(UINT_PTR nIDEvent)
 {
 	// TODO: Add your message handler code here and/or call default
 	if (TIMER_PULSE == nIDEvent) {
-		auto& clientList = m_server.m_clientMgr.m_clientList;
-		for (auto it = clientList.begin(); it != clientList.end(); ++it)
-		{
-			CClientContext *pClient = *it;
-			//比较时间
-			CTime curTime = CTime::GetCurrentTime();
-			int	nDay = curTime.GetDay() - pClient->m_time.GetDay();			//日
-			int	nHour = curTime.GetHour() - pClient->m_time.GetHour();		//小时
-			int	nMinute = curTime.GetMinute() - pClient->m_time.GetMinute();//分钟
-			int	nSecond = curTime.GetSecond() - pClient->m_time.GetSecond();//秒
+		//auto& clientList = m_server.m_clientMgr.m_clientList;
+		//for (auto it = clientList.begin(); it != clientList.end(); ++it)
+		//{
+		//	CClientContext *pClient = *it;
+		//	//比较时间
+		//	CTime curTime = CTime::GetCurrentTime();
+		//	int	nDay = curTime.GetDay() - pClient->m_time.GetDay();			//日
+		//	int	nHour = curTime.GetHour() - pClient->m_time.GetHour();		//小时
+		//	int	nMinute = curTime.GetMinute() - pClient->m_time.GetMinute();//分钟
+		//	int	nSecond = curTime.GetSecond() - pClient->m_time.GetSecond();//秒
 
-			CTimeSpan spanTime(nDay, nHour, nMinute, nSecond);
-			if (spanTime.GetSeconds() > 20)//大于20s
-			{
-				//删除该客户端
-				m_server.m_clientMgr.DeleteClient(pClient);
-			}
+		//	CTimeSpan spanTime(nDay, nHour, nMinute, nSecond);
+		//	if (spanTime.GetSeconds() > 20)//大于20s
+		//	{
+		//		//删除该客户端
+		//		m_server.m_clientMgr.DeleteClient(pClient);
+		//	}
+		//}
+	}
+
+	if (TIMER_BIGDATA == nIDEvent) {
+
+		static int i = 0;
+		if (i == m_vecBigdata.size()) {
+			KillTimer(TIMER_BIGDATA);
+			return;
 		}
+		BIGDATA& bigdata = m_vecBigdata[i++];
+		static CTaskSend taskSend;
+
+		SendOneTask(bigdata.agvno, bigdata.target);
 	}
 
 	CDialogEx::OnTimer(nIDEvent);
@@ -494,4 +510,82 @@ void CServerDlg::OnSize(UINT nType, int cx, int cy)
 	}
 
 	GetClientRect(&m_rcDlg);
+}
+
+
+void CServerDlg::OnClickedButtonDoone()
+{
+	// TODO: 在此添加控件通知处理程序代码
+	CString strAGVno, strTarget;
+	GetDlgItem(IDC_EDIT_CARNO)->GetWindowTextW(strAGVno);
+	GetDlgItem(IDC_EDIT_TARGET)->GetWindowTextW(strTarget);
+	if (strAGVno.IsEmpty() || strTarget.IsEmpty()) {
+		return;
+	}
+
+	int agvno = _ttoi(strAGVno);
+	int target = _ttoi(strTarget);
+
+	SendOneTask(agvno, target);
+}
+
+
+//发送一条任务
+void CServerDlg::SendOneTask(int carno, int target)
+{
+	static CTaskSend taskSend;
+	auto& clientList = m_server.m_clientMgr.m_clientList;
+	for (auto it = clientList.begin(); it != clientList.end(); ++it) {
+		CClientContext* pClient = *it;
+		if (pClient->m_carno == carno) {
+			char buf[M6_BUFFSIZE];
+			taskSend.ConstructM6(buf, carno, target);
+
+			char bufm2[M2_BUFFSIZE];
+			taskSend.ConstructM2(bufm2, carno, 1);
+
+			char bufm1[M1_BUFFSIZE];
+			taskSend.ConstructM1(bufm1, carno);
+
+			pClient->AsyncSendM6(buf, bufm2, bufm1);
+		}
+	}
+}
+
+
+//发送huge任务
+void CServerDlg::SendHugeTask()
+{
+	TCHAR szExePath[MAX_PATH];
+	GetModuleFileName(nullptr, szExePath, MAX_PATH);
+	CString str(szExePath);
+	int strPos = str.ReverseFind(_T('\\'));
+	str.Truncate(strPos);
+	str += _T("\\task.txt");
+
+	CStdioFile f(str, CFile::modeRead);
+	CString line;
+	CString strTmp;
+	BIGDATA bigdata;
+
+	while (f.ReadString(line))
+	{
+		int i = 0;
+		AfxExtractSubString(strTmp, line, i++, _T(' '));
+		bigdata.agvno = _ttoi(strTmp);
+
+		AfxExtractSubString(strTmp, line, i++, _T(' '));
+		bigdata.target = _ttoi(strTmp);
+
+		m_vecBigdata.push_back(bigdata);
+	}
+
+	SetTimer(TIMER_BIGDATA, 10 * 1000, nullptr); //每10s发送一个任务
+}
+
+
+void CServerDlg::OnClickedButtonDooneDohuge()
+{
+	// TODO: 在此添加控件通知处理程序代码
+	SendHugeTask();
 }

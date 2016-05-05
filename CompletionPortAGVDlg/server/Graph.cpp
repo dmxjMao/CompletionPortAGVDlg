@@ -71,6 +71,15 @@ BOOL Graph::Dijkstra(int ptSrc, int ptDest)
 	return TRUE;
 }
 
+//获取任务快照
+void Graph::GetTaskSnap(vector<UINT16>& taskSnap)
+{
+	taskSnap.clear();
+	for (auto it = m_casheTask.begin(); it != m_casheTask.end(); ++it) {
+		taskSnap.push_back(it->first);
+	}
+}
+
 int Graph::UnweightedGraph(Vertex * start)
 {
     // We find out the shortest path inside m_baseGraph from start point 'start'

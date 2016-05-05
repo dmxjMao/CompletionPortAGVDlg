@@ -78,7 +78,7 @@ void CClientContext::OnRecvE1Completed(DWORD dwIOSize)
 	// 获取小车信息
 	GetCarInfo(m_iIO.buf);
 
-	// 判断M6消息是否到达
+	// M6消息到达
 	if (m_m6tag == m_Sendm6tag) {
 		if (!m_bM6Ok) {
 			AsyncSendM2(m_m2buf);
@@ -86,7 +86,7 @@ void CClientContext::OnRecvE1Completed(DWORD dwIOSize)
 		}
 	}
 
-	// M2消息是否到达
+	// M2消息到达
 	if (m_m2tag == m_Sendm2tag) {
 		if (!m_bM2Ok) {
 			AsyncSendM1(m_m1buf);
@@ -94,11 +94,13 @@ void CClientContext::OnRecvE1Completed(DWORD dwIOSize)
 		}
 	}
 
-	// M1消息是否到达
+	// M1消息到达
 	if (m_m1tag == m_Sendm1tag) {
-		if (!m_bM1Ok) {
-			m_bM1Ok = TRUE;
-		}
+		m_bM6Ok = m_bM2Ok = FALSE;
+		m_Sendm6tag = m_Sendm2tag = m_Sendm1tag = 255;
+		//if (!m_bM1Ok) {
+		//	m_bM1Ok = TRUE;
+		//}
 	}
 
 	// 显示小车位置
@@ -134,14 +136,15 @@ void CClientContext::GetCarInfo(char* buf)
 	m_curSpeed = (buf[20] << 8) | buf[19];
 	m_optCompleted = buf[21];
 	m_curTaskno = (buf[23] << 8) | buf[22];
-	//如果小车有了新任务，将之前任务的终点置为触发&删除完成的任务
+
+	//如果小车有了新任务，将之前任务的终点置为可调用&删除完成的任务
 	if (m_curTaskno != m_prevTaskno) {
-		m_prevTaskno = m_curTaskno;
-		SetEvent(g_Graph.m_mapHandle[m_curPoint]);
+		ResetEvent(g_Graph.m_mapHandle[m_curPoint]);
 		if (auto it = g_Graph.m_casheTask.find(m_prevTaskno)
 			!= g_Graph.m_casheTask.end()) {
 			g_Graph.m_casheTask.erase(m_prevTaskno);
 		}
+		m_prevTaskno = m_curTaskno;
 	}
 
 	//UINT16 state(0);
@@ -170,10 +173,11 @@ void CClientContext::GetCarInfo(char* buf)
 
 BOOL CClientContext::JudgeChangeAndLockPoint()
 {
-	//
-	if (m_prevPoint != m_curPoint && 
-		m_curPoint != m_target) {
-		SetEvent(g_Graph.m_mapHandle[m_curPoint]);
+	//小车到了一个新的点上，释放之前点
+	if (m_prevPoint != m_curPoint /*&& m_curPoint != m_target*/) {
+		//至于最后一个终点，本来就要不可用
+		SetEvent(g_Graph.m_mapHandle[m_prevPoint]);
+		//ResetEvent(g_Graph.m_mapHandle[m_curPoint]);
 	}
 
 	if (m_prevPoint != m_curPoint ||
@@ -231,6 +235,7 @@ BOOL CClientContext::AsyncSendM1(char* buf)
 BOOL CClientContext::AsyncSendM6(char* buf, char* bufm2, char* bufm1)
 {
 	m_Sendm6tag = buf[5]; //缓存该M6标签
+	m_curTaskno = buf[8] << 8 | buf[7]; //当前任务号
 	m_target = buf[9];
 
 	DWORD flags(0);
@@ -346,14 +351,44 @@ BOOL CClientContext::GetRoute(int ptSrc, int ptDest)
 
 	HANDLE* p(nullptr);
 	int len(0);
-	if (GetOverlappedHandle(&p, len)) { //如果与其它任务冲突
-		WaitForMultipleObjects(len, p, TRUE, INFINITE); //等待点的可用
-		//等待成功后，设置点未触发
-		for (auto pt : m_vecRoute) {
-			ResetEvent(g_Graph.m_mapHandle[pt]);
-		}
+	if (GetOverlappedPoint(&p, len)) { //如果与小车当前点冲突
+		WaitForMultipleObjects(len, p, TRUE, INFINITE);
 		delete[] p; p = nullptr;
+		//return FALSE;
 	}
+
+	vector<UINT16> tasksnap; //任务快照
+	do {
+		if (!GetOverlappedHandle(&p, len, tasksnap)) {
+			break; //没有冲突
+		}
+		else {
+			WaitForMultipleObjects(len, p, TRUE, INFINITE); //等待点的可用
+			
+			decltype(tasksnap) tmpSnap;
+			g_Graph.GetTaskSnap(tmpSnap);
+			if (tasksnap != tmpSnap) { //如果有新任务
+				delete[] p; p = nullptr;
+				continue;
+			}
+			//等待成功后，设置点不可用
+			for (auto pt : m_vecRoute) {
+				ResetEvent(g_Graph.m_mapHandle[pt]);
+			}
+			delete[] p; p = nullptr;
+			break;
+		}
+
+	} while (1);
+
+	//if (GetOverlappedHandle(&p, len, tasksnap)) { //如果与其它任务冲突
+	//	WaitForMultipleObjects(len, p, TRUE, INFINITE); //等待点的可用
+	//	//等待成功后，设置点未触发
+	//	for (auto pt : m_vecRoute) {
+	//		ResetEvent(g_Graph.m_mapHandle[pt]);
+	//	}
+	//	delete[] p; p = nullptr;
+	//}
 
 	//cashe.insert(std::make_pair(std::make_pair(ptSrc, ptDest), m_vecRoute));
 	return TRUE;
@@ -445,7 +480,7 @@ void CClientContext::GetCurrentXY(CClientContext* pClient, CPoint& pt)
 */
 void CClientContext::SetM1Buf()
 {
-	//暂时将段号填入点号
+	//暂时将点号填入段号
 	//int sideno[] = { 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25 };
 	
 	m_m1buf[9] = (char)(m_vecRoute.size() - 1); //段数
@@ -468,14 +503,16 @@ auto IsPointInOtherTask(std::pair<UINT16, vector<int>> p, int pt) -> bool
 	return false;
 }
 
-BOOL CClientContext::GetOverlappedHandle(HANDLE** arr, int& len)
+BOOL CClientContext::GetOverlappedHandle(HANDLE** arr, int& len, std::vector<UINT16>& tasksnap)
 {
 	auto casheTask = g_Graph.m_casheTask; //拷贝一份任务
+	g_Graph.GetTaskSnap(tasksnap);
+
 	if (casheTask.empty()) {
 		return(FALSE); //没有重叠
 	}
 
-	casheTask.erase(TASK); //去掉当前任务
+	casheTask.erase(m_curTaskno); //去掉小车当前任务
 	vector<int> vecOverlapped;
 	using std::placeholders::_1;
 	for (auto pt : m_vecRoute) {
@@ -486,8 +523,19 @@ BOOL CClientContext::GetOverlappedHandle(HANDLE** arr, int& len)
 		}
 	}
 
+	//if (vecOverlapped.empty()) {
+	//	for (auto pt : m_vecRoute) { 
+	//		//没有重叠，将点置为未触发
+	//		ResetEvent(g_Graph.m_mapHandle[pt]);
+	//	}
+	//	return(FALSE);
+	//}
+
+	//去掉起点
+	vecOverlapped.erase(std::remove_if(vecOverlapped.begin(),
+		vecOverlapped.end(), [=](int i) { return i == m_curPoint; }), vecOverlapped.end());
 	if (vecOverlapped.empty()) {
-		for (auto pt : m_vecRoute) { 
+		for (auto pt : m_vecRoute) {
 			//没有重叠，将点置为未触发
 			ResetEvent(g_Graph.m_mapHandle[pt]);
 		}
@@ -503,6 +551,30 @@ BOOL CClientContext::GetOverlappedHandle(HANDLE** arr, int& len)
 	return(TRUE);
 }
 
+//获取与小车当前点的重叠点
+BOOL CClientContext::GetOverlappedPoint(HANDLE** arr, int& len)
+{
+	vector<int> vecOverlapped;
+	auto& clientList = m_pMainDlg->m_server.m_clientMgr.m_clientList;
+	for (auto it = clientList.begin(); it != clientList.end(); ++it) {
+		CClientContext* pClient = *it;
+		if (pClient->m_carno != m_carno) {
+			auto it = std::find(m_vecRoute.begin(), m_vecRoute.end(), pClient->m_curPoint);
+			if (m_vecRoute.end() != it) {
+				vecOverlapped.push_back(pClient->m_curPoint);
+			}
+		}
+	}
+	if (vecOverlapped.empty()) {
+		return FALSE;
+	}
+	len = (int)vecOverlapped.size();
+	*arr = new HANDLE[len];
+	for (int i = 0; i < len; ++i) {
+		(*arr)[i] = g_Graph.m_mapHandle[vecOverlapped[i]];
+	}
+	return TRUE;
+}
 
 /*
 * 显示小车
@@ -518,8 +590,8 @@ void CClientContext::ShowAGV()
 	memdc2.CreateCompatibleDC(pDC);
 
 	// 获取区域大小
-	RECT rc;
-	m_pMainDlg->GetClientRect(&rc);
+	CRect rc = m_pMainDlg->m_rcTarget;
+	//m_pMainDlg->GetClientRect(&rc);
 
 	/*
 	先把位图按view客户区大小选入内存设备，
