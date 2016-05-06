@@ -462,8 +462,8 @@ void CServerDlg::OnTimer(UINT_PTR nIDEvent)
 			KillTimer(TIMER_BIGDATA);
 			return;
 		}
-		BIGDATA& bigdata = m_vecBigdata[i++];
-		static CTaskSend taskSend;
+		BIGDATA bigdata = m_vecBigdata[i++];
+		//static CTaskSend taskSend;
 
 		SendOneTask(bigdata.agvno, bigdata.target);
 	}
